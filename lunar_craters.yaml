@@ -1,0 +1,9 @@
+# Lunar Crater Detection Dataset Configuration (YOLO Format)
+path: D:/moon/moon
+train: images/train
+val: images/val
+test: images/test
+
+# Classes
+names:
+  0: crater

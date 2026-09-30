@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunar Crater Feature Detection & Topological Graph Matching</title>
+    <meta name="description" content="Autonomous Lunar Crater Reconnaissance and Two-Image Topological Graph Matching without Overlay.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Top Navigation & System Status -->
+    <header class="app-header">
+        <div class="brand-container">
+            <div class="logo-icon">🌙</div>
+            <div>
+                <h1 class="brand-title">LUNAR CRATER RECONNAISSANCE & GRAPH MATCHING</h1>
+                <p class="brand-subtitle">Autonomous Feature Detection, Dual Photo Graph Matching & Crater Similarity Probabilities</p>
+            </div>
+        </div>
+        <div class="header-badges">
+            <span class="badge badge-accent" id="deviceBadge">DEVICE: CPU</span>
+            <span class="badge badge-accent" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border-color: rgba(16, 185, 129, 0.3);">OPENCV PARALLEL OPTIMIZED</span>
+            <span class="badge badge-status" id="apiStatusBadge">API ONLINE</span>
+        </div>
+    </header>
+
+    <!-- Primary System Mode Switcher: Inference vs Training -->
+    <nav class="system-mode-nav">
+        <div class="mode-switcher-container">
+            <span class="mode-label">SYSTEM WORKSPACE:</span>
+            <div class="mode-pill-toggle">
+                <button type="button" class="mode-pill-btn active" id="btnModeInference">
+                    <span class="pill-icon">🔍</span> Inference Mode (Crater Reconnaissance)
+                </button>
+                <button type="button" class="mode-pill-btn" id="btnModeTraining">
+                    <span class="pill-icon">🧠</span> Training Mode (Multi-Angle Loss & Weights)
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="main-content">
+        <!-- ============================================================= -->
+        <!-- MODE 1: INFERENCE & CRATER RECONNAISSANCE                     -->
+        <!-- ============================================================= -->
+        <div id="inferenceModeSection">
+            <!-- Control Panel: Upload & Ingestion -->
+            <section class="control-panel glass-panel">
+            <div class="control-header">
+                <h2>Mission Ingestion & Image Queue</h2>
+                <div class="action-buttons">
+                    <button id="runDemoBtn" class="btn btn-secondary">
+                        <span class="btn-icon">⚡</span> Run Demo Dataset
+                    </button>
+                    <button id="processBtn" class="btn btn-primary" disabled>
+                        <span class="btn-icon">🚀</span> Compute Features & Detect Craters
+                    </button>
+                </div>
+            </div>
+
+            <div class="upload-grid">
+                <div class="upload-dropzone" id="dropzone">
+                    <input type="file" id="fileInput" multiple accept=".xml,.raw,.img,.bin,.tif,.tiff,.png,.jpg,.jpeg" style="display:none;">
+                    <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none;">
+                    <div class="dropzone-content">
+                        <div class="drop-icon">📁</div>
+                        <p class="drop-primary">Drag & drop PDS4 products or lunar images here</p>
+                        <p class="drop-secondary">Upload multiple images across folders — cumulative selections are preserved</p>
+                        <div class="drop-btn-group">
+                            <button type="button" class="btn btn-outline" id="browseBtn">
+                                <span>+</span> Browse Files
+                            </button>
+                            <button type="button" class="btn btn-outline" id="browseFolderBtn">
+                                <span>📂</span> Browse Folder
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="files-preview-card" id="filesListCard">
+                    <div class="files-card-header">
+                        <h3>Loaded Image Queue (<span id="fileCount">0</span>)</h3>
+                        <button type="button" class="btn-text-danger" id="clearFilesBtn" style="display: none;">Clear All</button>
+                    </div>
+                    <div class="file-tags-container" id="fileTagsContainer">
+                        <div class="empty-state">No images loaded yet. Upload files or click "Run Demo Dataset".</div>
+                    </div>
+                    <div class="anchor-selector-row" id="anchorRow" style="display: none;">
+                        <label for="anchorSelect"><strong>Designated Reference (Anchor):</strong></label>
+                        <select id="anchorSelect" class="select-dropdown"></select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="spinner"></div>
+            <h3 id="loadingTitle">Computing Features Across Images...</h3>
+            <p id="loadingSubtitle">Running parallel NLM denoising at native resolution and detecting impact crater morphology...</p>
+        </div>
+
+        <!-- Main Results Section -->
+        <section class="results-container" id="resultsSection" style="display: none;">
+            <!-- Primary View Mode Switcher -->
+            <div class="view-mode-bar glass-panel">
+                <div class="mode-tabs">
+                    <button class="mode-tab active" id="tabGraphMatchBtn">
+                        <span class="tab-icon">🔗</span> Two-Image Feature & Graph Match
+                    </button>
+                    <button class="mode-tab" id="tabDetectedFeaturesBtn">
+                        <span class="tab-icon">🎯</span> Detected Features per Image
+                    </button>
+                </div>
+                <div class="mode-summary-stats" id="modeSummaryStats">
+                    <span class="summary-pill text-cyan" id="totalImagesPill">— Images Processed</span>
+                    <span class="summary-pill text-emerald" id="timePill">Elapsed: —</span>
+                </div>
+            </div>
+
+            <!-- VIEW 1: Two-Image Feature Graph Match (NO OVERLAY) -->
+            <div class="results-view-panel" id="viewGraphMatch">
+                <!-- Pair Selector Control Bar -->
+                <div class="pair-selector-card glass-panel">
+                    <div class="pair-selector-inputs">
+                        <div class="selector-field">
+                            <label for="selectImageA">Image 1 (Reference):</label>
+                            <select id="selectImageA" class="select-dropdown"></select>
+                        </div>
+                        <div class="swap-icon-container">
+                            <button type="button" id="swapImagesBtn" class="btn-icon-swap" title="Swap Reference and Comparison (Image 1 ⇄ Image 2)">⇄</button>
+                        </div>
+                        <div class="selector-field">
+                            <label for="selectImageB">Image 2 (Comparison):</label>
+                            <select id="selectImageB" class="select-dropdown"></select>
+                        </div>
+                        <button id="runPairMatchBtn" class="btn btn-primary" style="margin-top: 1.3rem;">
+                            <span>⚡</span> Match Features & Generate Graph
+                        </button>
+                    </div>
+                    <div class="graph-status-pills" id="graphStatusPills">
+                        <div class="graph-pill">
+                            <span class="pill-label">Matched Features:</span>
+                            <span class="pill-val text-cyan" id="matchCountVal">0</span>
+                        </div>
+                        <div class="graph-pill">
+                            <span class="pill-label">Crater Basin Matches:</span>
+                            <span class="pill-val text-emerald" id="craterMatchCountVal">0</span>
+                        </div>
+                        <div class="graph-pill">
+                            <span class="pill-label">Graph Topological Edges:</span>
+                            <span class="pill-val" id="graphEdgeCountVal">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dual Photo Graph Display -->
+                <div class="graph-display-card glass-panel">
+                    <div class="graph-card-header">
+                        <div>
+                            <h3 id="graphMatchTitle">Two-Image Topological Graph Match</h3>
+                            <p class="graph-card-subtitle">Circular points labeled 1 to n with topological constellation graphs drawn over both photos (No overlay)</p>
+                        </div>
+                        <div class="view-toggles">
+                            <button class="toggle-btn active" data-graph-view="side_by_side">Side-by-Side Dual View</button>
+                            <button class="toggle-btn" data-graph-view="photo_a">Photo 1 Graph</button>
+                            <button class="toggle-btn" data-graph-view="photo_b">Photo 2 Graph</button>
+                        </div>
+                    </div>
+
+                    <div class="graph-viz-container">
+                        <img id="graphMatchImg" class="viz-image-full" alt="Two-Image Graph Match">
+                    </div>
+
+                    <div class="graph-legend-bar">
+                        <div class="legend-item">
+                            <span class="legend-circle legend-crater"></span>
+                            <span>Crater Feature (Green)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-circle legend-keypoint"></span>
+                            <span>Salient Surface Point (Cyan)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-badge">①..Ⓝ</span>
+                            <span>Labeled Feature ID (1 to n)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-line"></span>
+                            <span>Topological Graph Edges</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Matched Features & Crater Similarity Description Probability Catalog -->
+                <div class="matched-catalog-card glass-panel">
+                    <div class="catalog-header">
+                        <h3>Matched Features & Crater Similarity Probabilities</h3>
+                        <span class="badge badge-accent" id="matchedCountBadge">24 Corresponding Points</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="crater-table" id="matchedFeaturesTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 70px;">Circle #</th>
+                                    <th style="width: 110px;">Type</th>
+                                    <th>Image 1 Feature</th>
+                                    <th>Image 2 Feature</th>
+                                    <th style="width: 170px;">Similarity Probability</th>
+                                    <th>Description & Morphometric Analysis</th>
+                                </tr>
+                            </thead>
+                            <tbody id="matchedFeaturesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: Detected Features per Individual Image -->
+            <div class="results-view-panel" id="viewDetectedFeatures" style="display: none;">
+                <!-- Single Image Selector Toolbar -->
+                <div class="single-image-toolbar glass-panel">
+                    <div class="image-select-row">
+                        <label for="singleImageSelect">Select Image to Inspect:</label>
+                        <select id="singleImageSelect" class="select-dropdown"></select>
+                    </div>
+                    <div class="image-meta-pills" id="imageMetaPills">
+                        <div class="graph-pill">
+                            <span class="pill-label">Dimensions:</span>
+                            <span class="pill-val" id="singleImgDim">—</span>
+                        </div>
+                        <div class="graph-pill">
+                            <span class="pill-label">Detected Craters:</span>
+                            <span class="pill-val text-emerald" id="singleImgCraters">0</span>
+                        </div>
+                        <div class="graph-pill">
+                            <span class="pill-label">Surface Features:</span>
+                            <span class="pill-val text-cyan" id="singleImgFeatures">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Single Image Feature Visualization -->
+                <div class="single-viz-grid">
+                    <div class="stage-card glass-panel">
+                        <div class="stage-card-header">
+                            <h3 id="singleImgTitle">Detected Craters & Keypoints</h3>
+                            <span class="badge badge-crater" id="singleCraterBadge">— Craters</span>
+                        </div>
+                        <div class="stage-viz-container">
+                            <img id="singleAnnotatedImg" class="viz-image-lg" alt="Detected Features">
+                        </div>
+                    </div>
+
+                    <!-- Single Image Crater Catalog Table -->
+                    <div class="stage-card glass-panel">
+                        <div class="stage-card-header">
+                            <h3>Detected Crater Catalog</h3>
+                            <span class="text-dim" style="font-size: 0.8rem;">Profile Verified</span>
+                        </div>
+                        <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+                            <table class="crater-table" id="singleCraterTable">
+                                <thead>
+                                    <tr>
+                                        <th>Crater ID</th>
+                                        <th>Center (X, Y)</th>
+                                        <th>Diameter</th>
+                                        <th>Contrast</th>
+                                        <th>Confidence</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="singleCraterTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        </div> <!-- End of inferenceModeSection -->
+
+        <!-- ============================================================= -->
+        <!-- MODE 2: NEURAL NETWORK TRAINING (MULTI-ANGLE LOSS & WEIGHTS)  -->
+        <!-- ============================================================= -->
+        <div id="trainingModeSection" class="training-section" style="display: none;">
+            <!-- Hero Architecture Banner -->
+            <section class="training-hero-card glass-panel">
+                <div class="control-header">
+                    <div>
+                        <h2 style="color: var(--accent-cyan);">Neural Network Multi-Angle Crater Learning</h2>
+                        <p class="brand-subtitle" style="margin-top: 0.35rem;">
+                            Given images of the same lunar crater viewed at divergent illumination and slant angles,
+                            the neural network calculates angle-invariance loss, backpropagates gradients, and updates its parameter weights.
+                        </p>
+                    </div>
+                    <div class="header-badges">
+                        <span class="badge badge-accent" id="trainModelBadge">MODEL: CRATERINVARIANCENET</span>
+                        <span class="badge badge-accent" id="trainParamsBadge">3,336,992 PARAMS</span>
+                        <span class="badge badge-status" id="trainStepsBadge">STEPS: 0</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Training Workspace Grid: Data Ingestion & Optimization Config -->
+            <div class="training-grid">
+                <!-- Data Ingestion Card -->
+                <section class="glass-panel training-data-card">
+                    <div class="control-header">
+                        <h3>Multi-Angle Crater Dataset</h3>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button id="loadMoonDatasetBtn" class="btn btn-outline" style="border-color: var(--accent-cyan); color: var(--accent-cyan);" title="Sample authentic crater rotations directly from D:\moon\moon">
+                                <span>🌙</span> Load from D:\moon
+                            </button>
+                            <button id="loadAngleDemoBtn" class="btn btn-secondary">
+                                <span class="btn-icon">⚡</span> Demo Set
+                            </button>
+                        </div>
+                    </div>
+                    <p class="drop-secondary" style="margin-top: 0.25rem;">
+                        Multi-angle views of the identical crater feature under varying sun incidence, azimuth, and tilts:
+                    </p>
+
+                    <div class="upload-dropzone" id="trainingDropzone" style="margin-top: 1rem; padding: 1.25rem;">
+                        <input type="file" id="trainingFileInput" multiple accept=".png,.jpg,.jpeg,.tif,.raw" style="display:none;">
+                        <div class="dropzone-content">
+                            <div class="drop-icon" style="font-size: 1.8rem;">📸</div>
+                            <p class="drop-primary" style="font-size: 0.9rem;">Upload images of same crater at different angles</p>
+                            <button type="button" class="btn btn-outline" id="browseTrainingBtn" style="padding: 0.35rem 0.9rem; font-size: 0.8rem; margin-top: 0.5rem;">
+                                + Select Multi-Angle Images
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Angle Previews Grid -->
+                    <div class="angle-previews-grid" id="anglePreviewsGrid">
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            No multi-angle crater images loaded. Click "Load Multi-Angle Demo Set" or upload images.
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Optimization & Hyperparameters Card -->
+                <section class="glass-panel training-config-card">
+                    <div class="control-header">
+                        <h3>Optimization & Hyperparameters</h3>
+                        <button id="resetWeightsBtn" class="btn-text-danger" title="Restore fresh initial baseline weights">
+                            ↺ Reset Weights
+                        </button>
+                    </div>
+
+                    <div class="config-form-grid">
+                        <div class="form-group">
+                            <label for="trainEpochs">Training Epochs:</label>
+                            <input type="number" id="trainEpochs" class="form-input" min="1" max="50" value="10">
+                        </div>
+                        <div class="form-group">
+                            <label for="trainLr">Learning Rate (&eta;):</label>
+                            <select id="trainLr" class="form-input">
+                                <option value="0.0005">0.0005</option>
+                                <option value="0.001" selected>0.001 (Recommended)</option>
+                                <option value="0.002">0.002</option>
+                                <option value="0.005">0.005</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="trainLossType">Loss Function:</label>
+                            <select id="trainLossType" class="form-input">
+                                <option value="contrastive" selected>Angle-Invariant Contrastive Loss</option>
+                                <option value="multi_angle_cosine">Multi-Angle Cosine Invariance Loss</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="trainOptimizer">PyTorch Optimizer:</label>
+                            <select id="trainOptimizer" class="form-input">
+                                <option value="adam" selected>Adam (Decoupled Momentum)</option>
+                                <option value="adamw">AdamW (Weight Decay)</option>
+                                <option value="sgd">SGD (Nesterov Momentum 0.9)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Math Formula Display -->
+                    <div class="math-formula-box">
+                        <div class="math-title">&fnof; Mathematical Loss Formulation:</div>
+                        <div class="math-eq" id="mathLossFormula">
+                            &Lscr;(&theta;) = ||z<sub>&theta;1</sub> - z<sub>&theta;2</sub>||<sup>2</sup> + 0.5 &middot; max(0, 1.0 - ||z<sub>&theta;1</sub> - z<sub>neg</sub>||)<sup>2</sup>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
+                        <button id="startTrainBtn" class="btn btn-primary" style="flex: 1;">
+                            <span class="btn-icon">🚀</span> Start Training & Update Parameters
+                        </button>
+                        <button id="stepTrainBtn" class="btn btn-secondary">
+                            <span class="btn-icon">⚡</span> Step 1 Epoch
+                        </button>
+                    </div>
+
+                    <!-- Training Progress Bar -->
+                    <div class="training-progress-container" id="trainProgressContainer">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-dim);">
+                            <span id="trainProgressLabel">Optimizing Parameters...</span>
+                            <span id="trainProgressPct">0%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="trainProgressBar"></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Live Telemetry & Loss Minimization Dashboard -->
+            <div id="trainingTelemetrySection" style="display: none;">
+                <!-- Telemetry KPI Cards -->
+                <div class="telemetry-kpi-grid">
+                    <div class="kpi-card">
+                        <span class="kpi-label">Calculated Loss</span>
+                        <span class="kpi-value text-cyan" id="kpiLoss">—</span>
+                        <span class="kpi-sub" id="kpiLossDelta">&Delta; —</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Gradient Norm ||&nabla;<sub>&theta;</sub>&Lscr;||</span>
+                        <span class="kpi-value text-emerald" id="kpiGradNorm">—</span>
+                        <span class="kpi-sub">Backprop Verified</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Weight Update Magnitude ||&Delta;W||</span>
+                        <span class="kpi-value" style="color: var(--accent-amber);" id="kpiWeightDelta">—</span>
+                        <span class="kpi-sub">Parameters Updated</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Angle Invariance Similarity</span>
+                        <span class="kpi-value text-emerald" id="kpiSimilarity">—</span>
+                        <span class="kpi-sub" id="kpiSimGain">+0.0% Gain</span>
+                    </div>
+                </div>
+
+                <!-- Loss Curve Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <h4 style="font-size: 0.9rem; font-weight: 600; color: var(--text-main);">Epoch vs. Invariance Loss Trajectory</h4>
+                            <p style="font-size: 0.75rem; color: var(--text-dim);">Real-time minimization of multi-angle crater divergence under PyTorch backprop</p>
+                        </div>
+                        <span class="summary-pill text-cyan" id="chartEpochCountPill">0 Epochs</span>
+                    </div>
+                    <div class="chart-canvas-container">
+                        <canvas id="lossChartCanvas" class="loss-canvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Visual Feature Comparison (Before vs After Training) -->
+                <div class="glass-panel visual-comparison-panel">
+                    <div class="control-header">
+                        <div>
+                            <h3 style="color: var(--accent-cyan);">Multi-Angle Crater Feature Activation Heatmaps</h3>
+                            <p class="drop-secondary" style="margin-top: 0.2rem;">
+                                Neural network layer activation energy before and after parameter updates across varying solar angles:
+                            </p>
+                        </div>
+                    </div>
+                    <div class="visual-cards-row" id="visualComparisonRow"></div>
+                </div>
+
+                <!-- Parameter Update Console Log -->
+                <div class="console-terminal" id="trainingConsoleLog">
+                    <div class="console-line highlight">[SYSTEM READY] Neural network weights loaded and ready for multi-angle crater learning.</div>
+                </div>
+
+                <!-- Switch to Inference Banner -->
+                <div class="switch-inference-banner">
+                    <div>
+                        <h4 style="color: #ffffff; font-size: 1rem; margin-bottom: 0.25rem;">✨ Neural Network Parameters Updated</h4>
+                        <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">
+                            The crater invariance weights are hot-loaded into the pipeline. Switch to Inference Mode to inspect enhanced matching on overlapping lunar frames.
+                        </p>
+                    </div>
+                    <button id="switchToInferenceBtn" class="btn btn-primary" style="white-space: nowrap;">
+                        <span>🔍</span> Switch to Inference Mode &rarr;
+                    </button>
+                </div>
+            </div>
+        </div> <!-- End of trainingModeSection -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <p>Lunar Crater Reconnaissance System | Streamlined Feature Detection & Dual Photo Graph Matching | OpenCV Multi-Thread Parallel Optimization</p>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
