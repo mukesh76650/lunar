@@ -1,3 +1,13 @@
+---
+title: Lunar Crater Detection
+emoji: 🌖
+colorFrom: purple
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Lunar Crater Detection System
 
 A high-performance lunar image processing and crater detection system built with FastAPI, PyTorch, and OpenCV.
